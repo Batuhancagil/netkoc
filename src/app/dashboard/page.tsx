@@ -55,9 +55,10 @@ export default async function DashboardOverview() {
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           <p>1. <Link className="text-primary underline" href="/dashboard/students">Öğrenci ekle</Link> ve alan (Sayısal/EA/Sözel/Dil) seç.</p>
-          <p>2. <Link className="text-primary underline" href="/dashboard/roadmap">Yol haritası</Link> — sistem şablonundan başla, öğrenciye özel düzenle.</p>
-          <p>3. <Link className="text-primary underline" href="/dashboard/weekly">Haftalık program</Link> — yol haritasından ön-doldur, öğrenciyle beraber güncelle.</p>
-          <p>4. <Link className="text-primary underline" href="/dashboard/trials">Deneme analizi</Link> — TYT/AYT netleri ve branş denemeleri.</p>
+          <p>2. <Link className="text-primary underline" href="/dashboard/roadmap">Yol haritası</Link> — alanı ve YKS / 9–12 şablonunu öğrenciye göre seç, sonra düzenle.</p>
+          <p>3. <Link className="text-primary underline" href="/dashboard/weekly">Haftalık program</Link> — yol haritası haftalarını aç, dersleri düzenle, toplu soru hedefi yaz.</p>
+          <p>4. <Link className="text-primary underline" href="/dashboard/curriculum">Müfredat</Link> — bu yıl okulda görülen temalar ve YKS’nin resmî sınıf–ünite listesi.</p>
+          <p>5. <Link className="text-primary underline" href="/dashboard/trials">Deneme analizi</Link> — TYT/AYT netleri ve branş denemeleri.</p>
         </CardContent>
       </Card>
     </div>

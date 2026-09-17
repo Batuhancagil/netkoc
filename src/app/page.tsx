@@ -31,6 +31,9 @@ export default function LandingPage() {
               <Link href="/apply">Hoca olarak katıl</Link>
             </Button>
             <Button asChild size="lg" variant="outline">
+              <Link href="/curriculum">YKS konu listesi</Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
               <Link href="/login">Hesabım var, giriş yap</Link>
             </Button>
           </div>

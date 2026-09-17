@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { requireTutorOrg } from "@/lib/tenant";
 import { writeAudit } from "@/lib/audit";
 import { daysOfWeek, findRoadmapWeek } from "@/lib/date";
+import { getOrCreateWeeklyFromRoadmapWeek } from "@/lib/weekly-from-roadmap";
 
 const createSchema = z.object({
   studentId: z.string().min(1),
@@ -67,7 +68,7 @@ export async function createWeeklyPlan(formData: FormData) {
         // Simple round robin: each cell gets assigned to the first 6 days
         const cells = rWeek.cells;
         for (let i = 0; i < cells.length; i++) {
-          const day = days[i % 6]; // skip Sunday
+          const day = days[i % 6];
           const cell = cells[i];
           await prisma.dailyPlan.create({
             data: {
@@ -75,8 +76,8 @@ export async function createWeeklyPlan(formData: FormData) {
               dayDate: day,
               subjectId: cell.subjectId,
               topicText: cell.topicText,
-              plannedQuestions: 30,
-              plannedMinutes: 60,
+              plannedQuestions: 0,
+              plannedMinutes: 0,
               order: i,
             },
           });
@@ -92,6 +93,76 @@ export async function createWeeklyPlan(formData: FormData) {
   });
 
   redirect(`/dashboard/weekly/${plan.id}`);
+}
+
+export async function openWeeklyFromRoadmap(formData: FormData) {
+  const { session, org } = await requireTutorOrg();
+  const studentId = String(formData.get("studentId") || "");
+  const roadmapWeekId = String(formData.get("roadmapWeekId") || "");
+  const student = await prisma.student.findFirst({
+    where: { id: studentId, orgId: org.id },
+  });
+  if (!student || !roadmapWeekId) redirect("/dashboard/weekly");
+
+  const plan = await getOrCreateWeeklyFromRoadmapWeek(student.id, roadmapWeekId);
+  if (!plan) redirect(`/dashboard/weekly?studentId=${student.id}`);
+
+  await writeAudit(session, {
+    action: "weeklyPlan.openFromRoadmap",
+    entity: "WeeklyPlan",
+    entityId: plan.id,
+    metadata: { roadmapWeekId },
+  });
+
+  redirect(`/dashboard/weekly/${plan.id}`);
+}
+
+export async function applyQuestionTargets(formData: FormData) {
+  const { session, org } = await requireTutorOrg();
+  const weeklyPlanId = String(formData.get("weeklyPlanId") || "");
+  const subjectId = String(formData.get("subjectId") || "").trim();
+  const plannedQuestions = Number(formData.get("plannedQuestions") ?? 0);
+  const minutesRaw = formData.get("plannedMinutes");
+  const plannedMinutes =
+    minutesRaw === null || String(minutesRaw).trim() === ""
+      ? undefined
+      : Number(minutesRaw);
+
+  if (!weeklyPlanId || Number.isNaN(plannedQuestions) || plannedQuestions < 0) return;
+
+  const plan = await prisma.weeklyPlan.findFirst({
+    where: { id: weeklyPlanId, student: { orgId: org.id } },
+    include: { dailyPlans: true },
+  });
+  if (!plan) return;
+
+  const rows = subjectId
+    ? plan.dailyPlans.filter((d) => d.subjectId === subjectId)
+    : plan.dailyPlans;
+  if (rows.length === 0) return;
+
+  await prisma.$transaction(
+    rows.map((row) =>
+      prisma.dailyPlan.update({
+        where: { id: row.id },
+        data: {
+          plannedQuestions,
+          ...(plannedMinutes !== undefined && !Number.isNaN(plannedMinutes)
+            ? { plannedMinutes }
+            : {}),
+        },
+      })
+    )
+  );
+
+  await writeAudit(session, {
+    action: "weeklyPlan.bulkTargets",
+    entity: "WeeklyPlan",
+    entityId: plan.id,
+    metadata: { subjectId: subjectId || null, plannedQuestions, count: rows.length },
+  });
+
+  revalidatePath(`/dashboard/weekly/${plan.id}`);
 }
 
 const dailyUpsertSchema = z.object({
@@ -126,6 +197,7 @@ export async function upsertDailyPlan(formData: FormData) {
     await prisma.dailyPlan.update({
       where: { id: parsed.data.id },
       data: {
+        subjectId: parsed.data.subjectId,
         topicText: parsed.data.topicText || null,
         plannedQuestions: parsed.data.plannedQuestions,
         plannedMinutes: parsed.data.plannedMinutes,

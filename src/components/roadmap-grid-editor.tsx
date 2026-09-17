@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { joinTopics, splitTopics } from "@/lib/topic-text";
+import { isOfficialTopic, joinTopics, matchOfficialTopics } from "@/lib/topic-text";
 import { MONTH_NAMES_TR } from "@/lib/constants";
-import { saveRoadmapGrid, addWeekLesson, addSubjectColumn, createSubjectTopic } from "@/app/dashboard/roadmap/actions";
+import { saveRoadmapGrid, addWeekLesson, addSubjectColumn, createSubjectTopic, createOrgSubject } from "@/app/dashboard/roadmap/actions";
 
 export type EditorSubject = {
   id: string;
@@ -53,7 +53,10 @@ export function RoadmapGridEditor({
   const [draft, setDraft] = useState<Record<string, string[]>>(() => {
     const next: Record<string, string[]> = {};
     for (const w of weeks) {
-      for (const c of w.cells) next[c.id] = splitTopics(c.topicText);
+      for (const c of w.cells) {
+        const official = subjects.find((s) => s.id === c.subjectId)?.topics.map((t) => t.name) ?? [];
+        next[c.id] = matchOfficialTopics(c.topicText, official);
+      }
     }
     return next;
   });
@@ -99,7 +102,8 @@ export function RoadmapGridEditor({
     <div className="space-y-4">
       <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-md border bg-card/95 p-3 backdrop-blur">
         <p className="text-sm text-muted-foreground">
-          Konuları listeden seç. Bir hücrede birden fazla konu olabilir. Kaydet tek tuş.
+          Hücrede Kaydet yok. Konuyu o dersin listesinden seç; bir hücrede birden fazla konu, sağda
+          haftaya başka ders. Bitince Tümünü kaydet.
         </p>
         <Button type="button" onClick={saveAll} disabled={pending}>
           {pending ? "Kaydediliyor…" : "Tümünü kaydet"}
@@ -121,6 +125,7 @@ export function RoadmapGridEditor({
                   </th>
                 );
               })}
+              <th className="border p-2 text-left">Bu haftaya ders</th>
             </tr>
           </thead>
           <tbody>
@@ -157,17 +162,27 @@ export function RoadmapGridEditor({
                           {selected.length === 0 ? (
                             <span className="text-muted-foreground">Konu yok</span>
                           ) : (
-                            selected.map((t) => (
-                              <button
-                                key={t}
-                                type="button"
-                                onClick={() => removeTopic(cell.id, t)}
-                                className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary hover:bg-primary/20"
-                                title="Kaldır"
-                              >
-                                {t} ×
-                              </button>
-                            ))
+                            selected.map((t) => {
+                              const official = isOfficialTopic(
+                                t,
+                                subject.topics.map((x) => x.name)
+                              );
+                              return (
+                                <button
+                                  key={t}
+                                  type="button"
+                                  onClick={() => removeTopic(cell.id, t)}
+                                  className={
+                                    official
+                                      ? "rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary hover:bg-primary/20"
+                                      : "rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-900 hover:bg-amber-200"
+                                  }
+                                  title={official ? "Kaldır" : "Liste dışı metin — kaldırıp listeden seç"}
+                                >
+                                  {t} ×
+                                </button>
+                              );
+                            })
                           )}
                         </div>
                         <select
@@ -189,12 +204,67 @@ export function RoadmapGridEditor({
                     </td>
                   );
                 })}
+                <td className="border p-1 align-top">
+                  <WeekAddLesson
+                    templateId={templateId}
+                    studentId={studentId}
+                    weekId={w.id}
+                    subjects={subjects}
+                  />
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
     </div>
+  );
+}
+
+function WeekAddLesson({
+  templateId,
+  studentId,
+  weekId,
+  subjects,
+}: {
+  templateId: string;
+  studentId?: string;
+  weekId: string;
+  subjects: EditorSubject[];
+}) {
+  const [subjectId, setSubjectId] = useState(subjects[0]?.id ?? "");
+  const topics = subjects.find((s) => s.id === subjectId)?.topics ?? [];
+
+  return (
+    <form action={addWeekLesson} className="flex min-w-[140px] flex-col gap-1">
+      <input type="hidden" name="templateId" value={templateId} />
+      <input type="hidden" name="weekId" value={weekId} />
+      {studentId ? <input type="hidden" name="studentId" value={studentId} /> : null}
+      <select
+        name="subjectId"
+        required
+        value={subjectId}
+        onChange={(e) => setSubjectId(e.target.value)}
+        className="h-8 rounded border bg-background px-1 text-[11px]"
+      >
+        {subjects.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.code}
+          </option>
+        ))}
+      </select>
+      <select name="topicText" className="h-8 rounded border bg-background px-1 text-[11px]">
+        <option value="">Konu (opsiyonel)</option>
+        {topics.map((t) => (
+          <option key={t.id} value={t.name}>
+            {t.name}
+          </option>
+        ))}
+      </select>
+      <Button type="submit" size="sm" variant="outline" className="h-7 px-2 text-[11px]">
+        Ders ekle
+      </Button>
+    </form>
   );
 }
 
@@ -339,6 +409,35 @@ export function RoadmapExtras({
         </div>
         <Button type="submit" variant="outline">
           Konuyu kaydet
+        </Button>
+      </form>
+
+      <form action={createOrgSubject} className="space-y-3 rounded-md border p-3 md:col-span-2">
+        <p className="text-sm font-medium">Yeni ders (branş)</p>
+        <p className="text-xs text-muted-foreground">
+          Sistem listesinde yoksa kendi dersini ekle. Tüm haftalara sütun olarak gelir; konuları ayrıca yazarsın.
+        </p>
+        <input type="hidden" name="templateId" value={templateId} />
+        {studentId ? <input type="hidden" name="studentId" value={studentId} /> : null}
+        <div className="grid gap-3 md:grid-cols-4">
+          <div className="space-y-1">
+            <Label>Kod</Label>
+            <Input name="code" required maxLength={20} placeholder="ORN. DENEME" />
+          </div>
+          <div className="space-y-1 md:col-span-2">
+            <Label>Ad</Label>
+            <Input name="name" required maxLength={80} placeholder="Branş deneme" />
+          </div>
+          <div className="space-y-1">
+            <Label>Düzey</Label>
+            <Select name="level" defaultValue="TYT">
+              <option value="TYT">TYT</option>
+              <option value="AYT">AYT</option>
+            </Select>
+          </div>
+        </div>
+        <Button type="submit" variant="outline">
+          Dersi ekle
         </Button>
       </form>
     </div>

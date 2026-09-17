@@ -31,6 +31,16 @@ export default async function NewStudentPage() {
               </Select>
             </div>
             <div className="space-y-2">
+              <Label htmlFor="grade">Sınıf (isteğe bağlı)</Label>
+              <Select id="grade" name="grade" defaultValue="">
+                <option value="">Mezun / yalnızca YKS</option>
+                <option value="9">9. sınıf</option>
+                <option value="10">10. sınıf</option>
+                <option value="11">11. sınıf</option>
+                <option value="12">12. sınıf</option>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="graduationYear">Mezuniyet Yılı</Label>
               <Input id="graduationYear" name="graduationYear" type="number" min="2024" max="2040" />
             </div>

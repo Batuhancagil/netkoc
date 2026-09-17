@@ -39,7 +39,16 @@ export default async function StudentDetailPage({
         <div>
           <h1 className="text-2xl font-bold">{student.fullName}</h1>
           <p className="text-sm text-muted-foreground">
-            <Badge variant="outline">{student.track}</Badge>{" "}
+            <Badge variant="outline">{student.track}</Badge>
+            {student.grade ? (
+              <Badge variant="secondary" className="ml-1">
+                {student.grade}. sınıf
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="ml-1">
+                YKS / mezun
+              </Badge>
+            )}{" "}
             <span className="ml-2">Başlangıç: {formatDate(student.startDate)}</span>
           </p>
         </div>

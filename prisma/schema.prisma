@@ -36,6 +36,14 @@ enum ExamLevel {
   AYT
 }
 
+enum RoadmapScope {
+  YKS
+  GRADE_9
+  GRADE_10
+  GRADE_11
+  GRADE_12
+}
+
 enum TrialType {
   TYT
   AYT
@@ -147,6 +155,7 @@ model Student {
 
   fullName       String
   track          ExamTrack
+  grade          Int?       // 9–12; boş = mezun / yalnızca YKS
   startDate      DateTime   @default(now())
   graduationYear Int?
   notes          String?
@@ -243,6 +252,7 @@ model RoadmapTemplate {
   name      String
   year      Int
   track     ExamTrack
+  scope     RoadmapScope @default(YKS)
   isSystem  Boolean   @default(false)
 
   weeks     RoadmapWeek[]
@@ -252,6 +262,7 @@ model RoadmapTemplate {
 
   @@index([orgId])
   @@index([track, isSystem])
+  @@index([track, scope, year])
 }
 
 model RoadmapWeek {

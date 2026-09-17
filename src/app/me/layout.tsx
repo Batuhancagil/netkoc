@@ -7,6 +7,7 @@ const NAV = [
   { href: "/me", label: "Bu Hafta" },
   { href: "/me/roadmap", label: "Yol Haritam" },
   { href: "/me/progress", label: "İlerlemem" },
+  { href: "/me/curriculum", label: "Konu Listesi" },
 ];
 
 export default async function StudentLayout({ children }: { children: ReactNode }) {
