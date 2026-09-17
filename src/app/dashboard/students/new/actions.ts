@@ -9,6 +9,7 @@ import { writeAudit } from "@/lib/audit";
 const schema = z.object({
   fullName: z.string().trim().min(2),
   track: z.enum(["SAYISAL", "EA", "SOZEL", "DIL"]),
+  grade: z.coerce.number().int().min(9).max(12).optional().or(z.nan()),
   graduationYear: z.coerce.number().int().min(2024).max(2040).optional().or(z.nan()),
   notes: z.string().trim().optional().or(z.literal("")),
 });
@@ -19,6 +20,7 @@ export async function createStudent(formData: FormData) {
   const parsed = schema.safeParse({
     fullName: formData.get("fullName"),
     track: formData.get("track"),
+    grade: formData.get("grade") && formData.get("grade") !== "" ? Number(formData.get("grade")) : undefined,
     graduationYear: gy && gy !== "" ? Number(gy) : undefined,
     notes: formData.get("notes"),
   });
@@ -29,6 +31,8 @@ export async function createStudent(formData: FormData) {
       orgId: org.id,
       fullName: parsed.data.fullName,
       track: parsed.data.track,
+      grade:
+        parsed.data.grade && !Number.isNaN(parsed.data.grade) ? Number(parsed.data.grade) : null,
       graduationYear:
         parsed.data.graduationYear && !Number.isNaN(parsed.data.graduationYear)
           ? Number(parsed.data.graduationYear)

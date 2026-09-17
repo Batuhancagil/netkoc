@@ -22,7 +22,13 @@ export async function ensureCurrentYearSystemTemplates(targetYear = 2026) {
 
   for (const source of sources) {
     const exists = await prisma.roadmapTemplate.findFirst({
-      where: { orgId: null, isSystem: true, year: targetYear, track: source.track },
+      where: {
+        orgId: null,
+        isSystem: true,
+        year: targetYear,
+        track: source.track,
+        scope: source.scope,
+      },
       select: { id: true },
     });
     if (exists) continue;
@@ -34,6 +40,7 @@ export async function ensureCurrentYearSystemTemplates(targetYear = 2026) {
           name: source.name.replace("2025-2026", "2026-2027"),
           year: targetYear,
           track: source.track,
+          scope: source.scope,
           isSystem: true,
         },
       });

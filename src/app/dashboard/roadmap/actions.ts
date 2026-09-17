@@ -6,11 +6,13 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireTutorOrg } from "@/lib/tenant";
 import { writeAudit } from "@/lib/audit";
+import { gradeFromScope } from "@/lib/constants";
 import { joinTopics, splitTopics } from "@/lib/topic-text";
 
 const assignSchema = z.object({
   studentId: z.string().min(1),
   templateId: z.string().min(1),
+  track: z.enum(["SAYISAL", "EA", "SOZEL", "DIL"]).optional(),
 });
 
 export async function assignRoadmapFromTemplate(formData: FormData) {
@@ -18,6 +20,7 @@ export async function assignRoadmapFromTemplate(formData: FormData) {
   const parsed = assignSchema.safeParse({
     studentId: formData.get("studentId"),
     templateId: formData.get("templateId"),
+    track: formData.get("track") || undefined,
   });
   if (!parsed.success) redirect("/dashboard/roadmap");
 
@@ -44,7 +47,8 @@ export async function assignRoadmapFromTemplate(formData: FormData) {
         orgId: org.id,
         name: `${source.name} — ${student.fullName}`,
         year: source.year,
-        track: source.track,
+        track: parsed.data.track ?? source.track,
+        scope: source.scope,
         isSystem: false,
       },
     });
@@ -69,6 +73,11 @@ export async function assignRoadmapFromTemplate(formData: FormData) {
         });
       }
     }
+    const nextTrack = parsed.data.track ?? source.track;
+    await tx.student.update({
+      where: { id: student.id },
+      data: { track: nextTrack, grade: gradeFromScope(source.scope) ?? student.grade },
+    });
     const existing = await tx.studentRoadmap.findUnique({
       where: { studentId: student.id },
     });
@@ -144,28 +153,44 @@ export async function createBlankRoadmap(formData: FormData) {
   const { session, org } = await requireTutorOrg();
   const studentId = String(formData.get("studentId") || "");
   const name = String(formData.get("name") || "").trim();
+  const trackRaw = String(formData.get("track") || "");
+  const scopeRaw = String(formData.get("scope") || "YKS");
   const student = await prisma.student.findFirst({
     where: { id: studentId, orgId: org.id },
   });
   if (!student) redirect("/dashboard/roadmap");
 
+  const track = (["SAYISAL", "EA", "SOZEL", "DIL"] as const).includes(trackRaw as "SAYISAL")
+    ? (trackRaw as "SAYISAL" | "EA" | "SOZEL" | "DIL")
+    : student.track;
+  const scope = (["YKS", "GRADE_9", "GRADE_10", "GRADE_11", "GRADE_12"] as const).includes(
+    scopeRaw as "YKS"
+  )
+    ? (scopeRaw as "YKS" | "GRADE_9" | "GRADE_10" | "GRADE_11" | "GRADE_12")
+    : "YKS";
+
   const year = academicYearStart();
   const subjects = await prisma.subject.findMany({
     where: {
       OR: [{ orgId: null }, { orgId: org.id }],
-      tracks: { has: student.track },
+      tracks: { has: track },
     },
     orderBy: { order: "asc" },
   });
   const weeks = blankWeeks(year);
 
   const tpl = await prisma.$transaction(async (tx) => {
+    await tx.student.update({
+      where: { id: student.id },
+      data: { track, grade: gradeFromScope(scope) ?? student.grade },
+    });
     const created = await tx.roadmapTemplate.create({
       data: {
         orgId: org.id,
         name: name || `${student.fullName} yol haritası`,
         year,
-        track: student.track,
+        track,
+        scope,
         isSystem: false,
       },
     });
@@ -373,6 +398,58 @@ export async function addSubjectColumn(formData: FormData) {
     entity: "RoadmapTemplate",
     entityId: template.id,
     metadata: { subjectId: subject.id },
+  });
+
+  redirect(editPath(template.id, studentId));
+}
+
+export async function createOrgSubject(formData: FormData) {
+  const { session, org } = await requireTutorOrg();
+  const templateId = String(formData.get("templateId") || "");
+  const studentId = String(formData.get("studentId") || "") || undefined;
+  const code = String(formData.get("code") || "").trim().toUpperCase().replace(/\s+/g, "_");
+  const name = String(formData.get("name") || "").trim();
+  const level = String(formData.get("level") || "TYT") === "AYT" ? "AYT" : "TYT";
+  if (!code || !name) return;
+
+  const template = await prisma.roadmapTemplate.findFirst({
+    where: { id: templateId, orgId: org.id },
+  });
+  if (!template) return;
+
+  const existing = await prisma.subject.findFirst({
+    where: { orgId: org.id, code },
+  });
+  const subject =
+    existing ??
+    (await prisma.subject.create({
+      data: {
+        orgId: org.id,
+        code,
+        name,
+        level,
+        tracks: [template.track],
+        order: 200,
+      },
+    }));
+
+  const weeks = await prisma.roadmapWeek.findMany({ where: { templateId: template.id } });
+  for (const week of weeks) {
+    const has = await prisma.roadmapCell.findUnique({
+      where: { weekId_subjectId: { weekId: week.id, subjectId: subject.id } },
+    });
+    if (!has) {
+      await prisma.roadmapCell.create({
+        data: { weekId: week.id, subjectId: subject.id, topicText: "" },
+      });
+    }
+  }
+
+  await writeAudit(session, {
+    action: "roadmap.createSubject",
+    entity: "Subject",
+    entityId: subject.id,
+    metadata: { code, name },
   });
 
   redirect(editPath(template.id, studentId));

@@ -10,6 +10,9 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { addRoadmapWeek } from "../../actions";
 import { RoadmapExtras, RoadmapGridEditor } from "@/components/roadmap-grid-editor";
+import { ensureCurrentYearSystemTemplates } from "@/lib/ensure-year-templates";
+import { ensureGradeSystemTemplates } from "@/lib/ensure-grade-templates";
+import { ensureSystemTopics } from "@/lib/ensure-system-topics";
 
 export default async function EditRoadmapPage({
   params,
@@ -21,6 +24,9 @@ export default async function EditRoadmapPage({
   const { templateId } = await params;
   const { studentId } = await searchParams;
   const { org } = await requireTutorOrg();
+  await ensureSystemTopics();
+  await ensureCurrentYearSystemTemplates(2026);
+  await ensureGradeSystemTemplates();
 
   const template = await prisma.roadmapTemplate.findFirst({
     where: { id: templateId, orgId: org.id },
@@ -79,8 +85,8 @@ export default async function EditRoadmapPage({
         <CardHeader>
           <CardTitle>Aylık grid</CardTitle>
           <CardDescription>
-            Hücredeki metin serbest ders adı değil; o sütunun dersindeki konulardır. Listeden seç,
-            bir haftaya birden fazla ders ve bir hücreye birden fazla konu koy. Tek tek kaydetme.
+            Sütun = ders, hücre = o dersin konuları (listeden). Bir haftaya sağdaki sütundan başka
+            ders eklenir. Yeni konu / yeni ders aşağıda ayrı tutulur. Tek tek Kaydet yok.
           </CardDescription>
         </CardHeader>
         <CardContent>

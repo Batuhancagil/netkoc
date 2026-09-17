@@ -36,6 +36,10 @@ export const SEED_SUBJECTS: SeedSubject[] = [
       "Permütasyon - Kombinasyon",
       "Binom ve Olasılık",
       "İstatistik",
+      "Asal Sayılar",
+      "Tek-Çift ve Ardışık Sayılar",
+      "Faktöriyel",
+      "Mantık",
     ].map((name, i) => ({ name, level: "TYT", order: i })),
   },
   {
@@ -275,6 +279,11 @@ export const SEED_SUBJECTS: SeedSubject[] = [
       "İntegral 2",
       "Kümeler",
       "Sayma - Olasılık",
+      "Karmaşık Sayılar",
+      "Bileşke ve Ters Fonksiyon",
+      "Üstel Fonksiyonlar",
+      "Süreklilik",
+      "Seriler",
     ].map((name, i) => ({ name, level: "AYT", order: i })),
   },
   {

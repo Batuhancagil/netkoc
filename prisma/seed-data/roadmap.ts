@@ -17,6 +17,7 @@ export type SeedRoadmap = {
   track: ExamTrack;
   name: string;
   year: number;
+  scope?: "YKS" | "GRADE_9" | "GRADE_10" | "GRADE_11" | "GRADE_12";
   weeks: SeedRoadmapWeek[];
 };
 
@@ -718,7 +719,7 @@ function shiftIsoYear(iso: string, years: number) {
   return dt.toISOString().slice(0, 10);
 }
 
-function shiftWeeks(weeks: SeedRoadmapWeek[], years: number): SeedRoadmapWeek[] {
+export function shiftWeeks(weeks: SeedRoadmapWeek[], years: number): SeedRoadmapWeek[] {
   return weeks.map((w) => ({
     ...w,
     startDate: shiftIsoYear(w.startDate, years),
@@ -726,13 +727,22 @@ function shiftWeeks(weeks: SeedRoadmapWeek[], years: number): SeedRoadmapWeek[] 
   }));
 }
 
+export const ROADMAP_CALENDAR: SeedRoadmapWeek[] = SAYISAL_WEEKS.map((w) => ({
+  monthIndex: w.monthIndex,
+  weekIndex: w.weekIndex,
+  label: w.label,
+  startDate: w.startDate,
+  endDate: w.endDate,
+  cells: {},
+}));
+
 export const SEED_ROADMAPS: SeedRoadmap[] = [
-  { track: "SAYISAL", name: "YKS 2025-2026 Sayısal", year: 2025, weeks: SAYISAL_WEEKS },
-  { track: "EA", name: "YKS 2025-2026 Eşit Ağırlık", year: 2025, weeks: EA_WEEKS },
-  { track: "SOZEL", name: "YKS 2025-2026 Sözel", year: 2025, weeks: SOZEL_WEEKS },
-  { track: "DIL", name: "YKS 2025-2026 Dil", year: 2025, weeks: DIL_WEEKS },
-  { track: "SAYISAL", name: "YKS 2026-2027 Sayısal", year: 2026, weeks: shiftWeeks(SAYISAL_WEEKS, 1) },
-  { track: "EA", name: "YKS 2026-2027 Eşit Ağırlık", year: 2026, weeks: shiftWeeks(EA_WEEKS, 1) },
-  { track: "SOZEL", name: "YKS 2026-2027 Sözel", year: 2026, weeks: shiftWeeks(SOZEL_WEEKS, 1) },
-  { track: "DIL", name: "YKS 2026-2027 Dil", year: 2026, weeks: shiftWeeks(DIL_WEEKS, 1) },
+  { track: "SAYISAL", name: "YKS 2025-2026 Sayısal", year: 2025, scope: "YKS", weeks: SAYISAL_WEEKS },
+  { track: "EA", name: "YKS 2025-2026 Eşit Ağırlık", year: 2025, scope: "YKS", weeks: EA_WEEKS },
+  { track: "SOZEL", name: "YKS 2025-2026 Sözel", year: 2025, scope: "YKS", weeks: SOZEL_WEEKS },
+  { track: "DIL", name: "YKS 2025-2026 Dil", year: 2025, scope: "YKS", weeks: DIL_WEEKS },
+  { track: "SAYISAL", name: "YKS 2026-2027 Sayısal", year: 2026, scope: "YKS", weeks: shiftWeeks(SAYISAL_WEEKS, 1) },
+  { track: "EA", name: "YKS 2026-2027 Eşit Ağırlık", year: 2026, scope: "YKS", weeks: shiftWeeks(EA_WEEKS, 1) },
+  { track: "SOZEL", name: "YKS 2026-2027 Sözel", year: 2026, scope: "YKS", weeks: shiftWeeks(SOZEL_WEEKS, 1) },
+  { track: "DIL", name: "YKS 2026-2027 Dil", year: 2026, scope: "YKS", weeks: shiftWeeks(DIL_WEEKS, 1) },
 ];

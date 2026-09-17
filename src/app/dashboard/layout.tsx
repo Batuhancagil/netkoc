@@ -9,6 +9,7 @@ const NAV = [
   { href: "/dashboard/students", label: "Öğrenciler" },
   { href: "/dashboard/roadmap", label: "Yol Haritası" },
   { href: "/dashboard/weekly", label: "Haftalık Program" },
+  { href: "/dashboard/curriculum", label: "Müfredat" },
   { href: "/dashboard/topics", label: "Konu Takibi" },
   { href: "/dashboard/trials", label: "Deneme Analizi" },
   { href: "/dashboard/monthly", label: "Aylık Rapor" },

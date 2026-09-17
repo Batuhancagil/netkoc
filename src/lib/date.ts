@@ -58,14 +58,55 @@ export function weekDayLabel(date: Date): string {
   return WEEKDAYS_TR[(date.getDay() + 6) % 7];
 }
 
-// Determine which roadmap week covers a given date
-export function findRoadmapWeek<T extends { startDate: Date; endDate: Date }>(
-  weeks: T[],
-  date: Date
-): T | null {
+/** Eylül=0 … Mayıs=8. Yaz aylarında -1. */
+export function academicMonthIndex(date: Date): number {
+  const m = date.getUTCMonth();
+  if (m >= 8) return m - 8;
+  if (m <= 4) return m + 4;
+  return -1;
+}
+
+export function academicWeekIndex(date: Date): number {
+  return Math.min(4, Math.floor((date.getUTCDate() - 1) / 7));
+}
+
+export function startOfUtcDay(date: Date) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+export function shiftUtcYears(date: Date, years: number) {
+  return new Date(
+    Date.UTC(date.getUTCFullYear() + years, date.getUTCMonth(), date.getUTCDate(), 12, 0, 0)
+  );
+}
+
+/** Yol haritası haftasının takvimini bu akademik yıla taşır (2025-26 şablon → 2026-27). */
+export function planDatesForRoadmapWeek(week: { startDate: Date; endDate: Date }, now = new Date()) {
+  const targetStartYear = now.getUTCMonth() >= 8 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
+  const srcStartYear =
+    week.startDate.getUTCMonth() >= 8
+      ? week.startDate.getUTCFullYear()
+      : week.startDate.getUTCFullYear() - 1;
+  const delta = targetStartYear - srcStartYear;
+  const weekStart = startOfUtcDay(shiftUtcYears(week.startDate, delta));
+  const weekEnd = startOfUtcDay(shiftUtcYears(week.endDate, delta));
+  weekEnd.setUTCHours(23, 59, 59, 999);
+  return { weekStart, weekEnd };
+}
+
+export function findRoadmapWeek<
+  T extends { startDate: Date; endDate: Date; monthIndex?: number; weekIndex?: number },
+>(weeks: T[], date: Date): T | null {
   const t = date.getTime();
   for (const w of weeks) {
     if (w.startDate.getTime() <= t && t <= w.endDate.getTime()) return w;
   }
-  return null;
+  const mi = academicMonthIndex(date);
+  const wi = academicWeekIndex(date);
+  if (mi < 0) return null;
+  return (
+    weeks.find((w) => w.monthIndex === mi && w.weekIndex === wi) ??
+    weeks.find((w) => w.monthIndex === mi) ??
+    null
+  );
 }

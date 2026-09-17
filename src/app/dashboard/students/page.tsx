@@ -61,6 +61,11 @@ export default async function StudentsPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline">{s.track}</Badge>
+                      {s.grade ? (
+                        <Badge variant="secondary" className="ml-1">
+                          {s.grade}. sınıf
+                        </Badge>
+                      ) : null}
                     </TableCell>
                     <TableCell>{formatDate(s.startDate)}</TableCell>
                     <TableCell className="text-xs">

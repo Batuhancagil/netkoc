@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { SEED_SUBJECTS } from "./seed-data/subjects";
 import { SEED_ROADMAPS } from "./seed-data/roadmap";
+import { SEED_GRADE_ROADMAPS } from "./seed-data/grade-roadmaps";
 
 const prisma = new PrismaClient();
 
@@ -82,9 +83,15 @@ async function seedRoadmaps() {
   const systemSubjects = await prisma.subject.findMany({ where: { orgId: null } });
   const subjectMap = new Map(systemSubjects.map((s) => [s.code, s.id]));
 
-  for (const roadmap of SEED_ROADMAPS) {
+  for (const roadmap of [...SEED_ROADMAPS, ...SEED_GRADE_ROADMAPS]) {
     const existingTpl = await prisma.roadmapTemplate.findFirst({
-      where: { orgId: null, track: roadmap.track, year: roadmap.year, isSystem: true },
+      where: {
+        orgId: null,
+        track: roadmap.track,
+        year: roadmap.year,
+        scope: roadmap.scope ?? "YKS",
+        isSystem: true,
+      },
     });
     if (existingTpl) {
       console.log(`[seed] Sistem sablonu duruyor, silinmedi: ${existingTpl.name}`);
@@ -96,6 +103,7 @@ async function seedRoadmaps() {
         name: roadmap.name,
         year: roadmap.year,
         track: roadmap.track,
+        scope: roadmap.scope ?? "YKS",
         isSystem: true,
       },
     });
@@ -127,11 +135,47 @@ async function seedRoadmaps() {
   }
 }
 
+async function seedLocalDemo() {
+  if (process.env.SEED_DEMO !== "1") return;
+  const email = process.env.SEED_DEMO_EMAIL ?? "hoca@netkoc.local";
+  const password = process.env.SEED_DEMO_PASSWORD ?? "netkoc-hoca-demo";
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    console.log(`[seed] Demo hoca duruyor: ${email}`);
+    return;
+  }
+  const passwordHash = await bcrypt.hash(password, 10);
+  const tutor = await prisma.user.create({
+    data: {
+      email,
+      passwordHash,
+      fullName: "Demo Hoca",
+      role: "TUTOR",
+      status: "ACTIVE",
+    },
+  });
+  const org = await prisma.organization.create({
+    data: { name: "Demo Koçluk", ownerUserId: tutor.id, weekStartsOn: 1 },
+  });
+  await prisma.user.update({ where: { id: tutor.id }, data: { orgId: org.id } });
+  await prisma.student.create({
+    data: {
+      orgId: org.id,
+      fullName: "İrem Çağıl",
+      track: "SAYISAL",
+      grade: 11,
+      graduationYear: 2028,
+    },
+  });
+  console.log(`[seed] Demo hoca + 11. sınıf öğrenci: ${email}`);
+}
+
 async function main() {
   console.log("[seed] Basliyor...");
   await seedAdmin();
   await seedSubjects();
   await seedRoadmaps();
+  await seedLocalDemo();
   console.log("[seed] Tamamlandi.");
 }
 

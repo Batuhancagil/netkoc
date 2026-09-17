@@ -11,6 +11,7 @@ import { prisma } from "@/lib/db";
 import { daysOfWeek, weekDayLabel, formatWeekLabel } from "@/lib/date";
 import { calcNet } from "@/lib/utils";
 import {
+  applyQuestionTargets,
   deleteDailyPlan,
   updatePlanNotes,
   upsertDailyEval,
@@ -44,8 +45,12 @@ export default async function WeeklyPlanEditor({
       OR: [{ orgId: null }, { orgId: org.id }],
       tracks: { has: plan.student.track },
     },
+    include: { topics: { orderBy: { order: "asc" } } },
     orderBy: [{ level: "asc" }, { order: "asc" }],
   });
+  const planSubjects = Array.from(
+    new Map(plan.dailyPlans.map((d) => [d.subjectId, d.subject])).values()
+  );
 
   const days = daysOfWeek(plan.weekStart);
   const evalMap = new Map<string, any>();
@@ -87,9 +92,47 @@ export default async function WeeklyPlanEditor({
 
       <Card>
         <CardHeader>
-          <CardTitle>Günlük Program</CardTitle>
+          <CardTitle>Toplu soru hedefi</CardTitle>
           <CardDescription>
-            Her gün için ders, konu, hedef soru/süre girin.
+            Bir derse veya haftadaki tüm konulara aynı çözülecek soru sayısını yaz. Tek tek
+            satırda da değiştirebilirsin. Boş bırakılan hedef 0 olabilir; öğrenci yine de
+            çözdüğünü girer.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form action={applyQuestionTargets} className="grid gap-3 md:grid-cols-4">
+            <input type="hidden" name="weeklyPlanId" value={plan.id} />
+            <div className="space-y-1">
+              <Label>Kapsam</Label>
+              <Select name="subjectId" defaultValue="">
+                <option value="">Tüm hafta / tüm konular</option>
+                {planSubjects.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.code} — {s.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Çözülecek soru</Label>
+              <Input name="plannedQuestions" type="number" min={0} defaultValue={40} required />
+            </div>
+            <div className="space-y-1">
+              <Label>Süre (dk, opsiyonel)</Label>
+              <Input name="plannedMinutes" type="number" min={0} placeholder="Boş = dokunma" />
+            </div>
+            <div className="flex items-end">
+              <Button type="submit">Toplu uygula</Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Yol haritasından dersler</CardTitle>
+          <CardDescription>
+            Hazır gelen ders ve konuları değiştir, sil veya güne başka ders ekle.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -134,18 +177,29 @@ export default async function WeeklyPlanEditor({
                               name="dayDate"
                               value={day.toISOString()}
                             />
-                            <input
-                              type="hidden"
+                            <select
                               name="subjectId"
-                              value={dp.subjectId}
-                            />
-                            <textarea
+                              defaultValue={dp.subjectId}
+                              className="w-full rounded border bg-background p-1 text-xs"
+                            >
+                              {subjects.map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.code} — {s.name}
+                                </option>
+                              ))}
+                            </select>
+                            <input
                               name="topicText"
                               defaultValue={dp.topicText ?? ""}
-                              rows={1}
-                              placeholder="Konu"
+                              list={`topics-${dp.subjectId}`}
+                              placeholder="Konu — listeden seç veya yaz"
                               className="w-full rounded border bg-background p-1 text-xs"
                             />
+                            <datalist id={`topics-${dp.subjectId}`}>
+                              {(subjects.find((s) => s.id === dp.subjectId)?.topics ?? []).map((t) => (
+                                <option key={t.id} value={t.name} />
+                              ))}
+                            </datalist>
                             <div className="flex gap-1">
                               <input
                                 name="plannedQuestions"
@@ -206,7 +260,7 @@ export default async function WeeklyPlanEditor({
                         type="number"
                         min="0"
                         placeholder="Soru"
-                        defaultValue={30}
+                        defaultValue={0}
                         className="w-16 rounded border bg-background p-1 text-xs"
                       />
                       <input
@@ -214,7 +268,7 @@ export default async function WeeklyPlanEditor({
                         type="number"
                         min="0"
                         placeholder="Dk"
-                        defaultValue={60}
+                        defaultValue={0}
                         className="w-16 rounded border bg-background p-1 text-xs"
                       />
                       <button
@@ -236,8 +290,8 @@ export default async function WeeklyPlanEditor({
         <CardHeader>
           <CardTitle>Haftalık Değerlendirme</CardTitle>
           <CardDescription>
-            Plan yapılan her satır için Doğru/Yanlış/Boş girişi. Öğrenci ve hoca
-            ikisi de girebilir; kim girdi loglanır.
+            Çözülen soru (D/Y/B). Hedef 0 olsa da, hoca girmese de öğrenci kendi
+            panelinden aynı satırlara yazabilir.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">

@@ -4,9 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { requireTutorOrg } from "@/lib/tenant";
 import { prisma } from "@/lib/db";
-import { TRACK_LABELS, MONTH_NAMES_TR } from "@/lib/constants";
-import { assignRoadmapFromTemplate, createBlankRoadmap } from "./actions";
+import { TRACK_LABELS, MONTH_NAMES_TR, SCOPE_LABELS, suggestedScope } from "@/lib/constants";
+import { RoadmapAssignForm } from "@/components/roadmap-assign-form";
 import { ensureCurrentYearSystemTemplates } from "@/lib/ensure-year-templates";
+import { ensureGradeSystemTemplates } from "@/lib/ensure-grade-templates";
+import { ensureSystemTopics } from "@/lib/ensure-system-topics";
 
 export default async function RoadmapOverviewPage({
   searchParams,
@@ -15,7 +17,9 @@ export default async function RoadmapOverviewPage({
 }) {
   const { org } = await requireTutorOrg();
   const { studentId } = await searchParams;
+  await ensureSystemTopics();
   await ensureCurrentYearSystemTemplates(2026);
+  await ensureGradeSystemTemplates();
 
   const students = await prisma.student.findMany({
     where: { orgId: org.id },
@@ -31,10 +35,9 @@ export default async function RoadmapOverviewPage({
     ? await prisma.roadmapTemplate.findMany({
         where: {
           OR: [{ orgId: null, isSystem: true }, { orgId: org.id }],
-          track: active.track,
         },
         include: { _count: { select: { weeks: true } } },
-        orderBy: [{ isSystem: "desc" }, { year: "desc" }],
+        orderBy: [{ isSystem: "desc" }, { year: "desc" }, { name: "asc" }],
       })
     : [];
 
@@ -64,7 +67,8 @@ export default async function RoadmapOverviewPage({
           <Select name="studentId" defaultValue={active?.id ?? ""} onChange={undefined}>
             {students.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.fullName} ({TRACK_LABELS[s.track]})
+                {s.fullName} ({TRACK_LABELS[s.track]}
+                {s.grade ? `, ${s.grade}. sınıf` : ""})
               </option>
             ))}
           </Select>
@@ -91,45 +95,27 @@ export default async function RoadmapOverviewPage({
                 {roadmapWithWeeks ? "Yol haritasını değiştir / ekle" : "Yol haritası ata"}
               </CardTitle>
               <CardDescription>
-                Hazır şablonu klonlayabilir veya boş bir ızgara açıp konuları listeden seçebilirsin.
-                Konu bankası 2018 lise / MEB 2026 YKS kazanım çerçevesi (2027 YKS aynı format).
-                Sistem şablonları Excel 2025-26 planından; 2026-27 kopyası tarihler bir yıl kaymış halde durur.
+                Önce alanı, sonra şablon türünü seç. Üniversiteye hazırlık için YKS; hâlâ lisedeyse 9–12.
+                Seçim öğrenciye göre sende. Sınıf şablonları 2026-27 Maarif (9–11) ve 2018 (12) ünitelerinden;
+                YKS şablonları TYT+AYT yıllık plandır.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <form action={assignRoadmapFromTemplate} className="flex flex-wrap items-end gap-3">
-                <input type="hidden" name="studentId" value={active.id} />
-                <div className="min-w-[280px] space-y-1">
-                  <label className="text-sm font-medium">Hazır şablon</label>
-                  <Select name="templateId" required={templates.length > 0} disabled={templates.length === 0}>
-                    {templates.length === 0 ? (
-                      <option value="">Bu alan için şablon yok</option>
-                    ) : (
-                      templates.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name} {t.isSystem ? "(Sistem)" : "(Kendi)"} — {t._count.weeks} hafta
-                        </option>
-                      ))
-                    )}
-                  </Select>
-                </div>
-                <Button type="submit" disabled={templates.length === 0}>
-                  Şablonu Klonla ve Ata
-                </Button>
-              </form>
-
-              <form action={createBlankRoadmap} className="flex flex-wrap items-end gap-3 border-t pt-4">
-                <input type="hidden" name="studentId" value={active.id} />
-                <div className="min-w-[280px] space-y-1">
-                  <label className="text-sm font-medium">Boş harita adı</label>
-                  <input
-                    name="name"
-                    defaultValue={`${active.fullName} yol haritası`}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  />
-                </div>
-                <Button type="submit">Boş harita oluştur ve düzenle</Button>
-              </form>
+            <CardContent>
+              <RoadmapAssignForm
+                studentId={active.id}
+                studentName={active.fullName}
+                defaultTrack={active.track}
+                suggestedScope={suggestedScope(active)}
+                studentGrade={active.grade}
+                templates={templates.map((t) => ({
+                  id: t.id,
+                  name: t.name,
+                  track: t.track,
+                  scope: t.scope,
+                  isSystem: t.isSystem,
+                  weekCount: t._count.weeks,
+                }))}
+              />
             </CardContent>
           </Card>
 
@@ -170,7 +156,8 @@ function RoadmapGrid({
         <div>
           <CardTitle>{template.name}</CardTitle>
           <CardDescription>
-            {template.weeks.length} hafta · Dersler: {subjectCodes.join(", ")}
+            {SCOPE_LABELS[template.scope] ?? template.scope} · {template.weeks.length} hafta · Dersler:{" "}
+            {subjectCodes.join(", ")}
           </CardDescription>
         </div>
         <Button asChild variant="outline">

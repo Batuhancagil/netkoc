@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { requireStudent } from "@/lib/auth/guards";
 import { prisma } from "@/lib/db";
 import {
@@ -14,7 +15,8 @@ import {
 } from "@/lib/date";
 import { formatDateISO } from "@/lib/date";
 import { calcNet, formatDate } from "@/lib/utils";
-import { studentUpsertEval } from "./actions";
+import { ensureWeeklyForDate } from "@/lib/weekly-from-roadmap";
+import { studentLogSolved, studentUpsertEval } from "./actions";
 
 export default async function MyWeekPage() {
   const session = await requireStudent();
@@ -37,17 +39,25 @@ export default async function MyWeekPage() {
 
   const org = student.org;
   const today = new Date();
-  const weekStart = startOfWeek(today, org.weekStartsOn);
-  const weekEnd = endOfWeek(today, org.weekStartsOn);
+  const ensured = await ensureWeeklyForDate(student.id, today, org.weekStartsOn);
 
   const plan = await prisma.weeklyPlan.findUnique({
-    where: { studentId_weekStart: { studentId: student.id, weekStart } },
+    where: { id: ensured.id },
     include: {
       dailyPlans: { include: { subject: true }, orderBy: { order: "asc" } },
-      evaluation: {
-        include: { dailyEvals: true },
-      },
+      evaluation: { include: { dailyEvals: true } },
     },
+  });
+
+  const weekStart = plan?.weekStart ?? startOfWeek(today, org.weekStartsOn);
+  const weekEnd = plan?.weekEnd ?? endOfWeek(today, org.weekStartsOn);
+
+  const subjects = await prisma.subject.findMany({
+    where: {
+      OR: [{ orgId: null }, { orgId: org.id }],
+      tracks: { has: student.track },
+    },
+    orderBy: [{ level: "asc" }, { order: "asc" }],
   });
 
   const days = daysOfWeek(weekStart);
@@ -64,9 +74,9 @@ export default async function MyWeekPage() {
       {!plan ? (
         <Card>
           <CardHeader>
-            <CardTitle>Bu Hafta Program Yok</CardTitle>
+            <CardTitle>Bu hafta için satır yok</CardTitle>
             <CardDescription>
-              Hocanız henüz bu hafta için bir program oluşturmadı.
+              Yine de aşağıdan çözdüğün soruları girebilirsin.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -74,10 +84,9 @@ export default async function MyWeekPage() {
         <>
           <Card>
             <CardHeader>
-              <CardTitle>Planlanan</CardTitle>
+              <CardTitle>Bu haftanın dersleri</CardTitle>
               <CardDescription>
-                Hocanızın sizin için planladığı çalışmalar. Değerlendirmeyi
-                günlük olarak aşağıdan girin.
+                Yol haritasından gelen konular. Hoca hedef yazmasa da çözdüğünü kaydedebilirsin.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -90,17 +99,14 @@ export default async function MyWeekPage() {
                   <div key={day.toISOString()} className="rounded-md border p-3">
                     <div className="mb-2 flex items-center justify-between text-sm font-semibold">
                       <span>{weekDayLabel(day)}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {formatDate(day)}
-                      </span>
+                      <span className="text-xs text-muted-foreground">{formatDate(day)}</span>
                     </div>
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="text-left text-xs text-muted-foreground">
                           <th className="py-1">Ders</th>
                           <th>Konu</th>
-                          <th>Soru</th>
-                          <th>Süre</th>
+                          <th>Hedef</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -108,13 +114,15 @@ export default async function MyWeekPage() {
                           <tr key={dp.id} className="border-t">
                             <td className="py-1">
                               <strong>{dp.subject.code}</strong>{" "}
-                              <span className="text-xs text-muted-foreground">
-                                {dp.subject.name}
-                              </span>
+                              <span className="text-xs text-muted-foreground">{dp.subject.name}</span>
                             </td>
                             <td className="text-xs">{dp.topicText ?? "—"}</td>
-                            <td>{dp.plannedQuestions}</td>
-                            <td>{dp.plannedMinutes} dk</td>
+                            <td className="text-xs">
+                              {dp.plannedQuestions > 0
+                                ? `${dp.plannedQuestions} soru`
+                                : "hedef yok"}
+                              {dp.plannedMinutes > 0 ? ` · ${dp.plannedMinutes} dk` : ""}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -122,6 +130,11 @@ export default async function MyWeekPage() {
                   </div>
                 );
               })}
+              {plan.dailyPlans.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Bu hafta henüz ders satırı yok. Aşağıdan çözdüğün soruyu ekle.
+                </p>
+              ) : null}
 
               {plan.notes ? (
                 <div className="rounded-md border p-3">
@@ -140,10 +153,9 @@ export default async function MyWeekPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Değerlendirme Girişi</CardTitle>
+              <CardTitle>Çözdüğüm sorular</CardTitle>
               <CardDescription>
-                Her plan satırı için D/Y/Boş ve süre gir. Kaydettiğinde
-                hocanıza anlık yansır.
+                Hoca hedef girmese de D/Y/Boş yaz. Hocanın paneline düşer.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -228,6 +240,31 @@ export default async function MyWeekPage() {
           </Card>
         </>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Listede yoksa da çözdüğümü ekle</CardTitle>
+          <CardDescription>
+            Hocanın planına bakmadan bugün çözdüğün dersi kaydet.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form action={studentLogSolved} className="grid gap-3 md:grid-cols-6">
+            <Select name="subjectId" required>
+              {subjects.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.code} — {s.name}
+                </option>
+              ))}
+            </Select>
+            <Input name="correct" type="number" min={0} placeholder="Doğru" required />
+            <Input name="wrong" type="number" min={0} placeholder="Yanlış" required />
+            <Input name="blank" type="number" min={0} placeholder="Boş" defaultValue={0} />
+            <Input name="minutes" type="number" min={0} placeholder="dk" defaultValue={0} />
+            <Button type="submit">Ekle</Button>
+          </form>
+        </CardContent>
+      </Card>
 
       <div className="flex gap-2">
         <Button asChild variant="outline">
