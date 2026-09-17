@@ -1,0 +1,544 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+enum Role {
+  PLATFORM_ADMIN
+  TUTOR
+  STUDENT
+  PARENT
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+}
+
+enum ExamTrack {
+  SAYISAL
+  EA
+  SOZEL
+  DIL
+}
+
+enum ExamLevel {
+  TYT
+  AYT
+}
+
+enum TrialType {
+  TYT
+  AYT
+  TYTAYT
+}
+
+enum EvalSource {
+  TEACHER
+  STUDENT
+}
+
+enum InviteKind {
+  TUTOR
+  STUDENT
+  PARENT
+}
+
+enum TopicSessionSource {
+  KONU
+  DENEME
+  BRANS
+}
+
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ============================================================================
+// Core: users, organizations, multi-tenancy
+// ============================================================================
+
+model User {
+  id             String     @id @default(cuid())
+  email          String     @unique
+  passwordHash   String?
+  fullName       String
+  role           Role
+  status         UserStatus @default(ACTIVE)
+
+  orgId          String?
+  org            Organization? @relation("OrgMembers", fields: [orgId], references: [id], onDelete: Cascade)
+
+  ownedOrg       Organization? @relation("OrgOwner")
+
+  studentProfile Student?      @relation("StudentUser")
+  parentLinks    ParentLink[]
+
+  createdInvites Invite[]      @relation("InviteCreator")
+  auditLogs      AuditLog[]    @relation("AuditActor")
+  impersonated   AuditLog[]    @relation("AuditImpersonated")
+
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@index([role])
+  @@index([orgId])
+}
+
+model Organization {
+  id            String    @id @default(cuid())
+  name          String
+  ownerUserId   String    @unique
+  owner         User      @relation("OrgOwner", fields: [ownerUserId], references: [id])
+  members       User[]    @relation("OrgMembers")
+
+  // 1 = Monday (ISO default), 4 = Thursday (Excel style)
+  weekStartsOn  Int       @default(1)
+
+  students      Student[]
+  subjects      Subject[]
+  publications  Publication[]
+  roadmapTemplates RoadmapTemplate[]
+  invites       Invite[]
+
+  createdAt     DateTime  @default(now())
+  disabledAt    DateTime?
+
+  @@index([ownerUserId])
+}
+
+model TutorApplication {
+  id         String            @id @default(cuid())
+  fullName   String
+  email      String
+  phone      String?
+  message    String?
+  status     ApplicationStatus @default(PENDING)
+  reviewedAt DateTime?
+  reviewedBy String?
+  createdAt  DateTime          @default(now())
+
+  @@index([status])
+  @@index([email])
+}
+
+// ============================================================================
+// Students & parents
+// ============================================================================
+
+model Student {
+  id             String     @id @default(cuid())
+  orgId          String
+  org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  userId         String?    @unique
+  user           User?      @relation("StudentUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  fullName       String
+  track          ExamTrack
+  startDate      DateTime   @default(now())
+  graduationYear Int?
+  notes          String?
+
+  parentLinks    ParentLink[]
+  roadmap        StudentRoadmap?
+  weeklyPlans    WeeklyPlan[]
+  topicSessions  TopicSession[]
+  trialExams     TrialExam[]
+  branchTrials   BranchTrial[]
+  payments       Payment[]
+  invites        Invite[]
+
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@index([orgId])
+}
+
+model ParentLink {
+  id            String   @id @default(cuid())
+  parentUserId  String
+  parent        User     @relation(fields: [parentUserId], references: [id], onDelete: Cascade)
+  studentId     String
+  student       Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+
+  @@unique([parentUserId, studentId])
+  @@index([studentId])
+}
+
+// ============================================================================
+// Curriculum: subjects, topics, publications
+// ============================================================================
+
+model Subject {
+  id          String       @id @default(cuid())
+  orgId       String?      // null = system-level
+  org         Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  code        String       // e.g. MAT1, MAT2, GEO, FIZ, KIM, BIY, TUR, PROB, TAR, COG, FEL, DIN, YDT
+  name        String
+  level       ExamLevel
+  tracks      ExamTrack[]
+  order       Int          @default(0)
+
+  topics      Topic[]
+  publications Publication[]
+  roadmapCells RoadmapCell[]
+  dailyPlans   DailyPlan[]
+  dailyEvals   DailyEval[]
+  branchTrials BranchTrial[]
+
+  @@unique([orgId, code])
+  @@index([orgId])
+}
+
+model Topic {
+  id         String    @id @default(cuid())
+  subjectId  String
+  subject    Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  name       String
+  level      ExamLevel
+  order      Int       @default(0)
+
+  sessions       TopicSession[]
+  trialBreakdowns TrialTopicBreakdown[]
+
+  @@index([subjectId])
+}
+
+model Publication {
+  id        String   @id @default(cuid())
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  subjectId String
+  subject   Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  name      String
+  notes     String?
+  createdAt DateTime @default(now())
+
+  @@index([orgId])
+  @@index([subjectId])
+}
+
+// ============================================================================
+// Roadmap
+// ============================================================================
+
+model RoadmapTemplate {
+  id        String    @id @default(cuid())
+  orgId     String?   // null = system
+  org       Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name      String
+  year      Int
+  track     ExamTrack
+  isSystem  Boolean   @default(false)
+
+  weeks     RoadmapWeek[]
+  students  StudentRoadmap[]
+
+  createdAt DateTime  @default(now())
+
+  @@index([orgId])
+  @@index([track, isSystem])
+}
+
+model RoadmapWeek {
+  id         String   @id @default(cuid())
+  templateId String
+  template   RoadmapTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  monthIndex Int      // 0 = September, ... 8 = May
+  weekIndex  Int      // 0..4 within month
+  startDate  DateTime
+  endDate    DateTime
+  label      String?  // e.g. "1-7 Eylül"
+
+  cells      RoadmapCell[]
+
+  @@unique([templateId, monthIndex, weekIndex])
+  @@index([templateId])
+}
+
+model RoadmapCell {
+  id        String   @id @default(cuid())
+  weekId    String
+  week      RoadmapWeek @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  subjectId String
+  subject   Subject  @relation(fields: [subjectId], references: [id])
+  topicText String   @default("")
+
+  @@unique([weekId, subjectId])
+  @@index([weekId])
+}
+
+model StudentRoadmap {
+  id          String   @id @default(cuid())
+  studentId   String   @unique
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  templateId  String
+  template    RoadmapTemplate @relation(fields: [templateId], references: [id])
+
+  createdAt   DateTime @default(now())
+}
+
+// ============================================================================
+// Weekly plans & evaluations
+// ============================================================================
+
+model WeeklyPlan {
+  id          String    @id @default(cuid())
+  studentId   String
+  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  weekStart   DateTime  // Monday (or org's weekStartsOn day) of the week
+  weekEnd     DateTime
+  weekNumber  Int       // sequential week of the student (1..42)
+  notes       String?
+  priorities  String?   // "Öncelikli çalışılması - tekrar edilmesi gerekenler"
+
+  dailyPlans  DailyPlan[]
+  evaluation  WeeklyEval?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([studentId, weekStart])
+  @@index([studentId])
+}
+
+model DailyPlan {
+  id                 String    @id @default(cuid())
+  weeklyPlanId       String
+  weeklyPlan         WeeklyPlan @relation(fields: [weeklyPlanId], references: [id], onDelete: Cascade)
+  dayDate            DateTime
+  subjectId          String
+  subject            Subject   @relation(fields: [subjectId], references: [id])
+  topicText          String?
+  plannedQuestions   Int       @default(0)
+  plannedMinutes     Int       @default(0)
+  order              Int       @default(0)
+
+  @@index([weeklyPlanId])
+  @@index([dayDate])
+}
+
+model WeeklyEval {
+  id           String    @id @default(cuid())
+  weeklyPlanId String    @unique
+  weeklyPlan   WeeklyPlan @relation(fields: [weeklyPlanId], references: [id], onDelete: Cascade)
+
+  dailyEvals   DailyEval[]
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model DailyEval {
+  id            String    @id @default(cuid())
+  weeklyEvalId  String
+  weeklyEval    WeeklyEval @relation(fields: [weeklyEvalId], references: [id], onDelete: Cascade)
+  dayDate       DateTime
+  subjectId     String
+  subject       Subject   @relation(fields: [subjectId], references: [id])
+  correct       Int       @default(0)
+  wrong         Int       @default(0)
+  blank         Int       @default(0)
+  minutes       Int       @default(0)
+  enteredBy     EvalSource
+  enteredAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([weeklyEvalId, dayDate, subjectId])
+  @@index([dayDate])
+}
+
+// ============================================================================
+// Topic tracking
+// ============================================================================
+
+model TopicSession {
+  id         String   @id @default(cuid())
+  studentId  String
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  topicId    String
+  topic      Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  date       DateTime
+  testCount  Int      @default(0)
+  correct    Int      @default(0)
+  wrong      Int      @default(0)
+  source     TopicSessionSource @default(KONU)
+  note       String?
+
+  createdAt  DateTime @default(now())
+
+  @@index([studentId])
+  @@index([topicId])
+}
+
+// ============================================================================
+// Trial exams
+// ============================================================================
+
+model TrialExam {
+  id           String    @id @default(cuid())
+  studentId    String
+  student      Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  date         DateTime
+  type         TrialType
+  publication  String?
+
+  // TYT section (40 Türkçe, 20 Sosyal, 40 Matematik, 20 Fen)
+  turkceD      Int       @default(0)
+  turkceY      Int       @default(0)
+  sosyalD      Int       @default(0)
+  sosyalY      Int       @default(0)
+  matD         Int       @default(0)
+  matY         Int       @default(0)
+  fenD         Int       @default(0)
+  fenY         Int       @default(0)
+
+  // AYT section
+  aytMatD      Int       @default(0)
+  aytMatY      Int       @default(0)
+  aytFizD      Int       @default(0)
+  aytFizY      Int       @default(0)
+  aytKimD      Int       @default(0)
+  aytKimY      Int       @default(0)
+  aytBiyD      Int       @default(0)
+  aytBiyY      Int       @default(0)
+  aytEdbD      Int       @default(0)
+  aytEdbY      Int       @default(0)
+  aytTarD      Int       @default(0)
+  aytTarY      Int       @default(0)
+  aytCogD      Int       @default(0)
+  aytCogY      Int       @default(0)
+  aytFelD      Int       @default(0)
+  aytFelY      Int       @default(0)
+
+  topicBreakdown TrialTopicBreakdown[]
+
+  createdAt    DateTime  @default(now())
+
+  @@index([studentId])
+  @@index([date])
+}
+
+model BranchTrial {
+  id           String   @id @default(cuid())
+  studentId    String
+  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subjectId    String
+  subject      Subject  @relation(fields: [subjectId], references: [id])
+  date         DateTime
+  publication  String?
+  correct      Int      @default(0)
+  wrong        Int      @default(0)
+  blank        Int      @default(0)
+
+  createdAt    DateTime @default(now())
+
+  @@index([studentId])
+  @@index([subjectId])
+}
+
+model TrialTopicBreakdown {
+  id            String    @id @default(cuid())
+  trialExamId   String
+  trialExam     TrialExam @relation(fields: [trialExamId], references: [id], onDelete: Cascade)
+  topicId       String
+  topic         Topic     @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  questionCount Int       @default(0)
+
+  @@unique([trialExamId, topicId])
+}
+
+// ============================================================================
+// Payments
+// ============================================================================
+
+model Payment {
+  id         String    @id @default(cuid())
+  studentId  String
+  student    Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  weekIndex  Int
+  dueDate    DateTime
+  paidAt     DateTime?
+  amount     Decimal?  @db.Decimal(10, 2)
+  currency   String?   @default("TRY")
+  note       String?
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([studentId, weekIndex])
+  @@index([studentId])
+}
+
+// ============================================================================
+// Invites
+// ============================================================================
+
+model Invite {
+  id           String     @id @default(cuid())
+  kind         InviteKind
+  role         Role
+  token        String     @unique
+  email        String?
+  fullName     String?
+
+  orgId        String?
+  org          Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  studentId    String?
+  student      Student?   @relation(fields: [studentId], references: [id], onDelete: SetNull)
+
+  // for parent invites, which student they'll be linked to
+  linkStudentId String?
+
+  expiresAt    DateTime
+  usedAt       DateTime?
+  createdById  String
+  createdBy    User       @relation("InviteCreator", fields: [createdById], references: [id])
+
+  createdAt    DateTime   @default(now())
+
+  @@index([orgId])
+  @@index([token])
+}
+
+// ============================================================================
+// Audit log
+// ============================================================================
+
+model AuditLog {
+  id                  String   @id @default(cuid())
+  actorUserId         String
+  actor               User     @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: Cascade)
+  impersonatedUserId  String?
+  impersonated        User?    @relation("AuditImpersonated", fields: [impersonatedUserId], references: [id], onDelete: SetNull)
+  orgId               String?
+  action              String
+  entity              String?
+  entityId            String?
+  metadata            Json?
+  ip                  String?
+  userAgent           String?
+
+  createdAt           DateTime @default(now())
+
+  @@index([actorUserId])
+  @@index([orgId])
+  @@index([createdAt])
+}
