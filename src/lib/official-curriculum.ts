@@ -1,6 +1,7 @@
 export type Grade = 9 | 10 | 11 | 12;
-export type ExamHint = "TYT" | "AYT" | "HER İKİSİ";
+export type ExamHint = "TYT" | "AYT" | "YDT" | "HER İKİSİ";
 export type ProgramKind = "yks2018" | "school2026";
+export type CurriculumTrack = "SAYISAL" | "EA" | "SOZEL" | "DIL";
 
 export type CurriculumUnit = {
   code: string;
@@ -12,9 +13,81 @@ export type CurriculumUnit = {
 export type CurriculumSubject = {
   id: string;
   name: string;
-  group: "sayısal" | "sözel" | "ortak";
+  group: "sayısal" | "sözel" | "ortak" | "dil";
   grades: Record<Grade, CurriculumUnit[]>;
 };
+
+export const CURRICULUM_TRACKS: CurriculumTrack[] = ["SAYISAL", "EA", "SOZEL", "DIL"];
+
+const STEM_IDS = new Set(["mat", "fizik", "kimya", "biyo"]);
+const VERBAL_IDS = new Set(["tde", "tarih", "inkilap", "cografya", "felsefe", "dkab"]);
+
+/** Dersin müfredat tarayıcısında hangi alanda görüneceği. */
+export const SUBJECT_TRACKS: Record<string, CurriculumTrack[]> = {
+  mat: ["SAYISAL", "EA", "SOZEL", "DIL"],
+  fizik: ["SAYISAL", "EA", "SOZEL", "DIL"],
+  kimya: ["SAYISAL", "EA", "SOZEL", "DIL"],
+  biyo: ["SAYISAL", "EA", "SOZEL", "DIL"],
+  tde: ["SAYISAL", "EA", "SOZEL", "DIL"],
+  tarih: ["SAYISAL", "EA", "SOZEL", "DIL"],
+  inkilap: ["EA", "SOZEL"],
+  cografya: ["SAYISAL", "EA", "SOZEL", "DIL"],
+  felsefe: ["SAYISAL", "EA", "SOZEL", "DIL"],
+  dkab: ["SAYISAL", "EA", "SOZEL", "DIL"],
+  ydt: ["DIL"],
+};
+
+export function tracksForSubject(subjectId: string): CurriculumTrack[] {
+  return SUBJECT_TRACKS[subjectId] ?? CURRICULUM_TRACKS;
+}
+
+/** Alan seçimine göre AYT/TYT/YDT ünitesini göster. */
+export function unitFitsTrack(
+  subjectId: string,
+  unit: CurriculumUnit,
+  track: CurriculumTrack | "all"
+): boolean {
+  if (track === "all") return true;
+  const aytOnly = unit.exam === "AYT";
+  if (track === "SAYISAL") {
+    if (subjectId === "ydt" || subjectId === "inkilap") return false;
+    if (VERBAL_IDS.has(subjectId) && aytOnly) return false;
+    return true;
+  }
+  if (track === "EA") {
+    if (subjectId === "ydt") return false;
+    if (["fizik", "kimya", "biyo"].includes(subjectId) && aytOnly) return false;
+    return true;
+  }
+  if (track === "SOZEL") {
+    if (subjectId === "ydt") return false;
+    if (STEM_IDS.has(subjectId) && aytOnly) return false;
+    return true;
+  }
+  if (track === "DIL") {
+    if (subjectId === "ydt") return true;
+    return !aytOnly;
+  }
+  return true;
+}
+
+export function subjectFitsTrack(subject: CurriculumSubject, track: CurriculumTrack | "all"): boolean {
+  if (track === "all") return true;
+  return tracksForSubject(subject.id).includes(track);
+}
+
+export function subjectTrackWeight(subjectId: string, track: CurriculumTrack | "all"): number {
+  const order =
+    track === "DIL"
+      ? ["ydt", "tde", "mat", "tarih", "cografya", "felsefe", "dkab"]
+      : track === "SOZEL"
+        ? ["tde", "tarih", "inkilap", "cografya", "felsefe", "dkab", "mat"]
+        : track === "EA"
+          ? ["mat", "tde", "tarih", "cografya", "felsefe", "dkab"]
+          : ["mat", "fizik", "kimya", "biyo", "tde"];
+  const i = order.indexOf(subjectId);
+  return i === -1 ? 50 : i;
+}
 
 export type SourceLink = {
   title: string;
@@ -400,6 +473,45 @@ export const YKS_2018_SUBJECTS: CurriculumSubject[] = [
       ],
     },
   },
+  {
+    id: "ydt",
+    name: "YDT İngilizce",
+    group: "dil",
+    grades: {
+      9: [
+        u("YDT.9.1", "Tenses", ["Present / past / future", "Perfect ve continuous", "Used to / would"], "YDT"),
+        u("YDT.9.2", "Nouns and Determiners", ["Countable-uncountable", "Articles", "Quantifiers", "Pronouns"], "YDT"),
+        u("YDT.9.3", "Adjectives and Adverbs", ["Sıfat-zarf", "Comparison", "Too / enough"], "YDT"),
+        u("YDT.9.4", "Prepositions and Linking", ["Prepositions of time/place", "Temel bağlaçlar"], "YDT"),
+        u("YDT.9.5", "Reading Basics", ["Kısa metin", "Ana fikir"], "YDT"),
+      ],
+      10: [
+        u("YDT.10.1", "Modals", ["Ability, obligation, advice", "Deduction (must/might/can’t)"], "YDT"),
+        u("YDT.10.2", "Passive Voice", ["Tense’lere göre passive", "Impersonal passive"], "YDT"),
+        u("YDT.10.3", "Relative Clauses", ["Defining / non-defining", "Where/when/why"], "YDT"),
+        u("YDT.10.4", "Noun Clauses", ["That / wh- / whether", "Reported question"], "YDT"),
+        u("YDT.10.5", "Conditionals", ["Zero–3rd", "Mixed", "Unless / as long as"], "YDT"),
+        u("YDT.10.6", "Gerunds and Infinitives", ["Verb patterns", "Purpose (to / for)"], "YDT"),
+      ],
+      11: [
+        u("YDT.11.1", "Reported Speech", ["Statement, question, command", "Backshift"], "YDT"),
+        u("YDT.11.2", "Causative", ["Have/get something done", "Make/let/help"], "YDT"),
+        u("YDT.11.3", "Wish and Unreal Past", ["Wish / if only", "It’s time / would rather"], "YDT"),
+        u("YDT.11.4", "Adverbial Clauses", ["Time, reason, contrast, purpose, result"], "YDT"),
+        u("YDT.11.5", "Emphasis and Inversion", ["Cleft sentences", "Negative inversion"], "YDT"),
+        u("YDT.11.6", "Discourse", ["Linkers", "Reference, cohesion"], "YDT"),
+      ],
+      12: [
+        u("YDT.12.1", "Cloze Test", ["Anlam ve dil bilgisi boşluk doldurma"], "YDT"),
+        u("YDT.12.2", "Sentence Completion", ["Cümle tamamlama"], "YDT"),
+        u("YDT.12.3", "Translation", ["TR→EN / EN→TR"], "YDT"),
+        u("YDT.12.4", "Reading Comprehension", ["Ana fikir, çıkarım, referans"], "YDT"),
+        u("YDT.12.5", "Dialogue Completion", ["Konuşma tamamlama"], "YDT"),
+        u("YDT.12.6", "Restatement", ["En yakın anlam / paraphrasing"], "YDT"),
+        u("YDT.12.7", "Paragraph Skills", ["Paragraph completion", "Irrelevant sentence"], "YDT"),
+      ],
+    },
+  },
 ];
 
 /** 2026-27 okulda görülen: 9-11 Maarif (resmî program PDF), 12. sınıf 2018. */
@@ -506,6 +618,15 @@ export const SCHOOL_2026_SUBJECTS: CurriculumSubject[] = [
       12: YKS_2018_SUBJECTS.find((s) => s.id === "biyo")!.grades[12],
     },
   },
+  ...YKS_2018_SUBJECTS.filter((s) =>
+    ["tde", "tarih", "inkilap", "cografya", "felsefe", "dkab", "ydt"].includes(s.id)
+  ).map((s) => ({
+    ...s,
+    name:
+      s.id === "ydt"
+        ? "YDT İngilizce (okul + sınav becerileri)"
+        : `${s.name} (2018 ünite; 9–11 Maarif teması mufredat.meb.gov.tr)`,
+  })),
 ];
 
 export const PROGRAMS: Record<
@@ -515,13 +636,13 @@ export const PROGRAMS: Record<
   yks2018: {
     label: "YKS sınav kapsamı (2018 program / TTKB 2026)",
     blurb:
-      "ÖSYM’nin 2026 YKS’sine esas TTKB belgesi 2018 lise programının sınıf–ünite listesidir. 2027 YKS için ayrı PDF henüz yok; bu yılki 12. sınıflar hâlâ bu programdan sorumludur. TYT kabaca 9–10 (+ temel matematik), AYT kabaca 11–12 (+ ilgili 10. sınıf).",
+      "Sayısal, EA, Sözel ve Dil (YDT) aynı belgeden. TTKB 2026 = 2018 programı. Alan seçince AYT fen yalnızca Sayısal’da, AYT sözel EA/Sözel’de, YDT yalnızca Dil’de görünür. TYT Türkçe–sosyal–mat–fen tüm alanlarda.",
     subjects: YKS_2018_SUBJECTS,
   },
   school2026: {
     label: "Bu yıl okulda görülen (2026-2027)",
     blurb:
-      "OGM 1 Eylül 2026: hazırlık, 9, 10 ve 11. sınıflarda Türkiye Yüzyılı Maarif Modeli; 12. sınıfta önceki (2018) program. Aşağıda matematik, fizik, kimya ve biyoloji resmî program PDF’lerinden. Edebiyat, tarih, coğrafya ve DKAB da 9–11’de Maarif’e geçti; tam tema listesi için mufredat.meb.gov.tr.",
+      "9–11 STEM temaları Maarif PDF’inden. Edebiyat, tarih, coğrafya, felsefe, DKAB ve YDT İngilizce 2018 ünite adlarıyla (9–11 Maarif tema metni henüz satır satır işlenmedi). Dil öğrencisi YDT’yi, Sözel edebiyat–tarih–coğrafya–felsefeyi, Sayısal fen–matematiği seçer.",
     subjects: SCHOOL_2026_SUBJECTS,
   },
 };

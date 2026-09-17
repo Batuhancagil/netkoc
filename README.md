@@ -17,7 +17,7 @@ Railway: https://railway.com/project/c2f687a1-245d-46e8-a0c5-6fd3ba3130c3
 Yol haritasında hoca önce alanı (Sayısal / EA / Sözel / Dil), sonra şablon türünü seçer: üniversiteye hazırlık için YKS, öğrenci hâlâ lisedeyse 9–12. sınıf. Seçim öğrenci kaydına kilitli değil; hoca öğrenciye göre karar verir. Sonra şablonu klonlar veya boş harita açar. Düzenlemede konular ders listesinden seçilir, bir haftaya birden fazla ders eklenir, grid tek tuşla kaydedilir.
 
 Müfredat / sınıf-konu listesi: https://netkoc-web-production.up.railway.app/curriculum
-TTKB 2026 YKS PDF + 2026-2027 Maarif (9–11) / 2018 (12) okul programı.
+Alan seçimi: Sayısal, EA, Sözel, Dil (YDT). TTKB 2026 YKS PDF + 2026-2027 Maarif STEM / 2018 sözel-dil üniteleri.
 
 Haftalık program: https://netkoc-web-production.up.railway.app/dashboard/weekly
 Yol haritası haftaları listelenir; açınca dersler hazır gelir. Toplu soru hedefi ders bazında veya tüm haftaya uygulanır. Öğrenci hedef olmasa da çözdüğünü girer: https://netkoc-web-production.up.railway.app/me

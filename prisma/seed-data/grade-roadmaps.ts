@@ -106,7 +106,9 @@ function buildGradeWeeks(track: ExamTrack, grade: Grade): SeedRoadmapWeek[] {
   const series = new Map<string, string[]>();
   for (const col of cols) {
     if (col.code === "YDT_ING") {
-      series.set(col.code, englishTitles(calendar.length));
+      const units = schoolUnitsFor(grade, "ydt");
+      const titles = units.length ? units.map((u) => u.title) : englishTitles(calendar.length);
+      series.set(col.code, spreadTitles(titles, calendar.length));
       continue;
     }
     const units = schoolUnitsFor(grade, col.key);

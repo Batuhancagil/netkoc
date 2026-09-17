@@ -7,10 +7,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { CopyableUrl } from "@/components/copyable-url";
+import { TRACK_LABELS } from "@/lib/constants";
 import {
+  CURRICULUM_TRACKS,
   CURRICULUM_YEAR,
   OFFICIAL_SOURCES,
   PROGRAMS,
+  subjectFitsTrack,
+  subjectTrackWeight,
+  tracksForSubject,
+  unitFitsTrack,
+  type CurriculumTrack,
   type ExamHint,
   type Grade,
   type ProgramKind,
@@ -24,23 +31,39 @@ function examVariant(exam: ExamHint): "default" | "secondary" | "outline" {
   return "outline";
 }
 
+function groupLabel(group: string) {
+  if (group === "sayısal") return "Sayısal ders";
+  if (group === "sözel") return "Sözel ders";
+  if (group === "dil") return "Dil / YDT";
+  return "Ortak (TYT)";
+}
+
 export function CurriculumBrowser() {
   const [program, setProgram] = useState<ProgramKind>("yks2018");
+  const [track, setTrack] = useState<CurriculumTrack | "all">("all");
   const [grade, setGrade] = useState<Grade | "all">("all");
   const [subjectId, setSubjectId] = useState("all");
   const [exam, setExam] = useState<ExamHint | "all">("all");
   const [q, setQ] = useState("");
 
   const pack = PROGRAMS[program];
+  const visibleSubjects = useMemo(
+    () =>
+      pack.subjects
+        .filter((s) => subjectFitsTrack(s, track))
+        .sort((a, b) => subjectTrackWeight(a.id, track) - subjectTrackWeight(b.id, track)),
+    [pack, track]
+  );
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLocaleLowerCase("tr");
-    return pack.subjects
+    return visibleSubjects
       .filter((s) => subjectId === "all" || s.id === subjectId)
       .map((s) => {
         const grades = GRADES.filter((g) => grade === "all" || g === grade)
           .map((g) => {
             const units = s.grades[g].filter((u) => {
+              if (!unitFitsTrack(s.id, u, track)) return false;
               if (exam !== "all" && u.exam !== exam && u.exam !== "HER İKİSİ") return false;
               if (!needle) return true;
               const hay = `${s.name} ${u.code} ${u.title} ${u.topics.join(" ")}`.toLocaleLowerCase("tr");
@@ -52,7 +75,7 @@ export function CurriculumBrowser() {
         return { subject: s, grades };
       })
       .filter((row) => row.grades.length > 0);
-  }, [pack, grade, subjectId, exam, q]);
+  }, [visibleSubjects, grade, subjectId, exam, q, track]);
 
   const unitCount = filtered.reduce(
     (n, row) => n + row.grades.reduce((m, g) => m + g.units.length, 0),
@@ -65,22 +88,66 @@ export function CurriculumBrowser() {
         <CardHeader>
           <CardTitle>Sınıf — ders — konu listesi</CardTitle>
           <CardDescription>
-            {CURRICULUM_YEAR} eğitim yılı. Ticari “2027 konu listesi” siteleri resmî değildir.
+            {CURRICULUM_YEAR} eğitim yılı. Sayısal, eşit ağırlık, sözel ve dil (YDT) ayrı seçilir.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 text-sm leading-relaxed">
           <p>
-            İki ayrı liste var. <strong>YKS kapsamı</strong> TTKB’nin 26 Kasım 2025’te yayımladığı 2026
-            YKS PDF’sidir (2018 programı). <strong>2027 YKS için ayrı bir TTKB belgesi henüz yok.</strong>{" "}
-            Bu yılki 12. sınıflar okulda da 2018 programını okur; sınav dayanakları budur.
+            Önce <strong>alanı</strong> seç. Sayısal’da AYT fen–matematik, EA’da matematik + edebiyat +
+            tarih–coğrafya, Sözel’de edebiyat–tarih–coğrafya–felsefe–DKAB, Dil’de YDT İngilizce öne çıkar.
+            TYT Türkçe, sosyal, matematik ve fen tüm alanlarda durur.
           </p>
           <p>
-            <strong>Okulda bu yıl görülen</strong> ise OGM’nin 1 Eylül 2026 duyurusuna göre hazırlık,
-            9, 10 ve 11’de Maarif Modeli; 12’de önceki programdır. 9–11 matematik, fizik, kimya ve
-            biyoloji temaları resmî program PDF’lerinden alınmıştır.
+            <strong>YKS kapsamı</strong> TTKB 26 Kasım 2025 / 2026 YKS PDF’sidir (2018 program).{" "}
+            <strong>Okulda bu yıl</strong> 9–11 STEM Maarif, diğer dersler 2018 ünite adıyla; 12. sınıf 2018.
+            Almanca / Fransızca YDT aynı soru tipleridir; dil bilgisi o dile göredir.
           </p>
         </CardContent>
       </Card>
+
+      <div>
+        <Label>Alan</Label>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setTrack("all");
+              setSubjectId("all");
+            }}
+            className={`rounded-md border px-3 py-2 text-sm ${
+              track === "all" ? "border-primary bg-primary/10 font-medium" : "hover:bg-muted/40"
+            }`}
+          >
+            Tüm alanlar
+          </button>
+          {CURRICULUM_TRACKS.map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => {
+                setTrack(value);
+                setSubjectId("all");
+              }}
+              className={`rounded-md border px-3 py-2 text-sm ${
+                track === value ? "border-primary bg-primary/10 font-medium" : "hover:bg-muted/40"
+              }`}
+            >
+              {TRACK_LABELS[value]}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {track === "all"
+            ? "Tüm dersler. Alan seçince o alandaki AYT / YDT ünitesi öne çıkar."
+            : track === "SAYISAL"
+              ? "AYT matematik, fizik, kimya, biyoloji + TYT ortak."
+              : track === "EA"
+                ? "AYT matematik, edebiyat, tarih, coğrafya + TYT fen ve ortak."
+                : track === "SOZEL"
+                  ? "AYT edebiyat, tarih, inkılap, coğrafya, felsefe, DKAB + TYT mat–fen."
+                  : "YDT İngilizce + TYT Türkçe, sosyal, matematik, fen. AYT branş yok."}
+        </p>
+      </div>
 
       <div className="grid gap-3 md:grid-cols-2">
         {(Object.keys(PROGRAMS) as ProgramKind[]).map((key) => (
@@ -117,7 +184,7 @@ export function CurriculumBrowser() {
           <Label>Ders</Label>
           <Select value={subjectId} onChange={(e) => setSubjectId(e.target.value)}>
             <option value="all">Tüm dersler</option>
-            {pack.subjects.map((s) => (
+            {visibleSubjects.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
               </option>
@@ -127,26 +194,28 @@ export function CurriculumBrowser() {
         <div>
           <Label>Sınav</Label>
           <Select value={exam} onChange={(e) => setExam(e.target.value as ExamHint | "all")}>
-            <option value="all">TYT + AYT</option>
+            <option value="all">TYT + AYT + YDT</option>
             <option value="TYT">TYT</option>
             <option value="AYT">AYT</option>
+            <option value="YDT">YDT</option>
           </Select>
         </div>
         <div>
           <Label>Ara</Label>
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Türev, fotosentez, Tanzimat…" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Türev, Tanzimat, cloze…" />
         </div>
       </div>
 
       <p className="text-sm text-muted-foreground">
-        {unitCount} ünite / tema. Boş gelen ders-sınıf kombinasyonu o sınıfta o dersin programda
-        olmadığını gösterir (ör. felsefe 9, inkılap 9–11).
+        {unitCount} ünite / tema
+        {track !== "all" ? ` · ${TRACK_LABELS[track]}` : ""}. Boş gelen ders-sınıf o programda yok
+        (ör. felsefe 9, inkılap 9–11) veya seçilen alana ait değil.
       </p>
 
       {filtered.length === 0 ? (
         <Card>
           <CardContent className="pt-6 text-sm text-muted-foreground">
-            Bu süzgeçte ünite yok. Sınıfı veya aramayı genişlet.
+            Bu alan ve süzgeçte ünite yok. Alanı, sınıfı veya aramayı genişlet.
           </CardContent>
         </Card>
       ) : (
@@ -154,6 +223,14 @@ export function CurriculumBrowser() {
           <Card key={subject.id}>
             <CardHeader>
               <CardTitle className="text-lg">{subject.name}</CardTitle>
+              <CardDescription className="flex flex-wrap gap-1">
+                <Badge variant="outline">{groupLabel(subject.group)}</Badge>
+                {tracksForSubject(subject.id).map((t) => (
+                  <Badge key={t} variant={t === track ? "default" : "secondary"}>
+                    {TRACK_LABELS[t]}
+                  </Badge>
+                ))}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {grades.map(({ grade: g, units }) => (
